@@ -2,13 +2,18 @@ package com.example.shahar.myapplication;
 
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.Log;
+import android.view.Display;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
@@ -26,7 +31,7 @@ public class MainActivity extends BaseActivity implements
     private Button create_account;
     private Button verify_email;
 
-
+    float x1,x2,y1,y2,leftx,rightx,screenHeight,screenWidth,deltaY;
 
     // [START declare_auth]
     private FirebaseAuth mAuth;
@@ -36,6 +41,13 @@ public class MainActivity extends BaseActivity implements
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        DisplayMetrics displayMetrics = new DisplayMetrics();
+        getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
+        screenHeight = displayMetrics.heightPixels;
+        screenWidth = displayMetrics.widthPixels;
+        leftx = screenWidth/3;
+        rightx = leftx*2;
 
         // Views
         mStatusTextView = (TextView) findViewById(R.id.status);
@@ -145,24 +157,26 @@ public class MainActivity extends BaseActivity implements
         // Send verification email
         // [START send_email_verification]
         final FirebaseUser user = mAuth.getCurrentUser();
-        user.sendEmailVerification()
-                .addOnCompleteListener(this, task -> {
-                    // [START_EXCLUDE]
-                    // Re-enable button
-                    findViewById(R.id.verify_email_button).setEnabled(true);
+        if (user != null) {
+            user.sendEmailVerification()
+                    .addOnCompleteListener(this, task -> {
+                        // [START_EXCLUDE]
+                        // Re-enable button
+                        findViewById(R.id.verify_email_button).setEnabled(true);
 
-                    if (task.isSuccessful()) {
-                        Toast.makeText(MainActivity.this,
-                                "Verification email sent to " + user.getEmail(),
-                                Toast.LENGTH_SHORT).show();
-                    } else {
-                        Log.e(TAG, "sendEmailVerification", task.getException());
-                        Toast.makeText(MainActivity.this,
-                                "Failed to send verification email.",
-                                Toast.LENGTH_SHORT).show();
-                    }
-                    // [END_EXCLUDE]
-                });
+                        if (task.isSuccessful()) {
+                            Toast.makeText(MainActivity.this,
+                                    "Verification email sent to " + user.getEmail(),
+                                    Toast.LENGTH_SHORT).show();
+                        } else {
+                            Log.e(TAG, "sendEmailVerification", task.getException());
+                            Toast.makeText(MainActivity.this,
+                                    "Failed to send verification email.",
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                        // [END_EXCLUDE]
+                    });
+        }
         // [END send_email_verification]
     }
 
@@ -222,5 +236,35 @@ public class MainActivity extends BaseActivity implements
         } else if (i == R.id.verify_email_button) {
             sendEmailVerification();
         }
+    }
+    @Override
+    public boolean onTouchEvent(MotionEvent event)
+    {
+        switch(event.getAction())
+        {
+            case MotionEvent.ACTION_DOWN:
+                x1 = event.getX();
+                y1 = event.getY();
+                break;
+            case MotionEvent.ACTION_UP:
+                x2 = event.getX();
+                y2 = event.getY();
+                deltaY = y2 - y1;
+                if (deltaY > screenHeight/2.5 && x1 > leftx && x1 < rightx && x2 > leftx && x2 < rightx)
+                {
+                    showProgressDialog();
+                    if(mAuth.getCurrentUser()!=null) {
+                        mAuth.getCurrentUser()
+                                .reload()
+                                .addOnSuccessListener(aVoid -> {
+                                    FirebaseUser user = mAuth.getCurrentUser();
+                                    updateUI(user);
+                                });
+                    }
+                    hideProgressDialog();
+                }
+                break;
+        }
+        return super.onTouchEvent(event);
     }
 }
