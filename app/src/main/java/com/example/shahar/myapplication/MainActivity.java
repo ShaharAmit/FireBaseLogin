@@ -1,6 +1,7 @@
 package com.example.shahar.myapplication;
 
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -15,7 +16,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 
-public class MainActivity extends BaseActivity implements
+public class MainActivity extends AppCompatActivity implements
         View.OnClickListener {
 
     private static final String TAG = "EmailPassword";
@@ -28,6 +29,9 @@ public class MainActivity extends BaseActivity implements
     private Button create_account;
     private Button verify_email;
 
+    FirebaseHelper FirebaseHelperInstance;
+    FirebaseUser currentUser;
+
     float x1,x2,y1,y2,leftx,rightx,screenHeight,screenWidth,deltaY;
 
     // [START declare_auth]
@@ -36,6 +40,8 @@ public class MainActivity extends BaseActivity implements
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        FirebaseHelperInstance = FirebaseHelper.getInstance();
+        mAuth = FirebaseHelperInstance.getmAuth();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -62,9 +68,6 @@ public class MainActivity extends BaseActivity implements
         sign_out.setOnClickListener(this);
         sign_in.setOnClickListener(this);
 
-        // [START initialize_auth]
-        mAuth = FirebaseAuth.getInstance();
-        // [END initialize_auth]
     }
 
     // [START on_start_check_user]
@@ -72,8 +75,8 @@ public class MainActivity extends BaseActivity implements
     public void onStart() {
         super.onStart();
         // Check if user is signed in (non-null) and update UI accordingly.
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        updateUI(currentUser);
+        currentUser = FirebaseHelperInstance.getCurrentUser();
+        updateUI();
     }
     // [END on_start_check_user]
 
@@ -83,29 +86,12 @@ public class MainActivity extends BaseActivity implements
             return;
         }
 
-        showProgressDialog();
-
-        // [START create_user_with_email]
-        mAuth.createUserWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, task -> {
-                    if (task.isSuccessful()) {
-                        // Sign in success, update UI with the signed-in user's information
-                        Log.d(TAG, "createUserWithEmail:success");
-                        FirebaseUser user = mAuth.getCurrentUser();
-                        updateUI(user);
-                    } else {
-                        // If sign in fails, display a message to the user.
-                        Log.w(TAG, "createUserWithEmail:failure", task.getException());
-                        Toast.makeText(MainActivity.this, "Authentication failed.",
-                                Toast.LENGTH_SHORT).show();
-                        updateUI(null);
-                    }
-
-                    // [START_EXCLUDE]
-                    hideProgressDialog();
-                    // [END_EXCLUDE]
-                });
-        // [END create_user_with_email]
+        currentUser = FirebaseHelperInstance.createAccount(email,password);
+        if(currentUser==null) {
+            Toast.makeText(MainActivity.this, "Authentication failed.",
+                    Toast.LENGTH_SHORT).show();
+        }
+        updateUI();
     }
 
     private void signIn(String email, String password) {
@@ -114,37 +100,19 @@ public class MainActivity extends BaseActivity implements
             return;
         }
 
-        showProgressDialog();
+        currentUser = FirebaseHelperInstance.signIn(email,password);
+        if(currentUser == null){
+            Toast.makeText(MainActivity.this, "Authentication failed.",
+                    Toast.LENGTH_SHORT).show();
+            mStatusTextView.setText(R.string.auth_failed);
 
-        // [START sign_in_with_email]
-        mAuth.signInWithEmailAndPassword(email, password)
-                .addOnCompleteListener(this, task -> {
-                    if (task.isSuccessful()) {
-                        // Sign in success, update UI with the signed-in user's information
-                        Log.d(TAG, "signInWithEmail:success");
-                        FirebaseUser user = mAuth.getCurrentUser();
-                        updateUI(user);
-                    } else {
-                        // If sign in fails, display a message to the user.
-                        Log.w(TAG, "signInWithEmail:failure", task.getException());
-                        Toast.makeText(MainActivity.this, "Authentication failed.",
-                                Toast.LENGTH_SHORT).show();
-                        updateUI(null);
-                    }
-
-                    // [START_EXCLUDE]
-                    if (!task.isSuccessful()) {
-                        mStatusTextView.setText(R.string.auth_failed);
-                    }
-                    hideProgressDialog();
-                    // [END_EXCLUDE]
-                });
-        // [END sign_in_with_email]
+        }
+        updateUI();
     }
 
     private void signOut() {
-        mAuth.signOut();
-        updateUI(null);
+        currentUser = FirebaseHelperInstance.signOutmAuth();
+        updateUI();
     }
 
     private void sendEmailVerification() {
@@ -153,9 +121,8 @@ public class MainActivity extends BaseActivity implements
 
         // Send verification email
         // [START send_email_verification]
-        final FirebaseUser user = mAuth.getCurrentUser();
-        if (user != null) {
-            user.sendEmailVerification()
+        if (currentUser != null) {
+            currentUser.sendEmailVerification()
                     .addOnCompleteListener(this, task -> {
                         // [START_EXCLUDE]
                         // Re-enable button
@@ -163,7 +130,7 @@ public class MainActivity extends BaseActivity implements
 
                         if (task.isSuccessful()) {
                             Toast.makeText(MainActivity.this,
-                                    "Verification email sent to " + user.getEmail(),
+                                    "Verification email sent to " + currentUser.getEmail(),
                                     Toast.LENGTH_SHORT).show();
                         } else {
                             Log.e(TAG, "sendEmailVerification", task.getException());
@@ -199,18 +166,17 @@ public class MainActivity extends BaseActivity implements
         return valid;
     }
 
-    private void updateUI(FirebaseUser user) {
-        hideProgressDialog();
-        if (user != null) {
+    private void updateUI() {
+        if (currentUser != null) {
             mStatusTextView.setText(getString(R.string.emailpassword_status_fmt,
-                    user.getEmail(), user.isEmailVerified()));
+                    currentUser.getEmail(), currentUser.isEmailVerified()));
 
             sign_out.setVisibility(View.VISIBLE);
             sign_in.setVisibility(View.GONE);
             verify_email.setVisibility(View.VISIBLE);
             create_account.setVisibility(View.GONE);
 
-            findViewById(R.id.verify_email_button).setEnabled(!user.isEmailVerified());
+            findViewById(R.id.verify_email_button).setEnabled(!currentUser.isEmailVerified());
         } else {
             mStatusTextView.setText(R.string.signed_out);
 
@@ -249,16 +215,9 @@ public class MainActivity extends BaseActivity implements
                 deltaY = y2 - y1;
                 if (deltaY > screenHeight/2.5 && x1 > leftx && x1 < rightx && x2 > leftx && x2 < rightx)
                 {
-                    showProgressDialog();
-                    if(mAuth.getCurrentUser()!=null) {
-                        mAuth.getCurrentUser()
-                                .reload()
-                                .addOnSuccessListener(aVoid -> {
-                                    FirebaseUser user = mAuth.getCurrentUser();
-                                    updateUI(user);
-                                });
-                    }
-                    hideProgressDialog();
+                    currentUser = FirebaseHelperInstance.UpdateCurrentUser();
+                    if (currentUser != null)
+                        updateUI();
                 }
                 break;
         }
